@@ -1,0 +1,19 @@
+{
+  "name": "gmaps-scraper",
+  "version": "1.0.0",
+  "description": "Local dashboard that collects business listings from Google Maps into SQLite, with a configurable delay between listings.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "create-admin": "node scripts/create-admin.js",
+    "seed-templates": "node scripts/seed-templates.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.0.0",
+    "express": "^4.21.0",
+    "puppeteer": "^25.12.0"
+  }
+}

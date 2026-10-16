@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Message templates</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Manrope', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+          colors: { brand: { 50: '#ecf8f5', 600: '#0f766e', 700: '#0b5f59' } },
+        },
+      },
+    };
+  </script>
+  <style> body { background: #f5f6f4; } </style>
+</head>
+<body class="font-sans text-slate-800 antialiased">
+  <header class="border-b border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+      <h1 class="text-lg font-semibold">Message templates</h1>
+      <div class="flex items-center gap-4"><span id="userNav" class="flex items-center gap-4 text-sm"></span>
+<script>
+  fetch('/api/me').then((r) => r.json()).then((me) => {
+    document.getElementById('userNav').innerHTML =
+      (me.role === 'admin' ? '<a href="/users.html" class="font-medium text-brand-600 hover:underline">Users</a>' : '') +
+      '<span class="text-slate-500">' + me.username.replace(/[<>&"]/g, '') + '</span>' +
+      '<button id="logoutBtn" class="font-medium text-slate-600 hover:underline">Log out</button>';
+    document.getElementById('logoutBtn').onclick = async () => { await fetch('/api/logout', { method: 'POST' }); location.href = '/login.html'; };
+  });
+</script>
+        <a href="/" class="text-sm font-medium text-brand-600 hover:underline">&larr; Back to collector</a></div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl space-y-6 px-4 py-6">
+    <!-- Settings -->
+    <section class="rounded-xl border border-slate-200 bg-white p-5">
+      <h2 class="mb-3 text-base font-semibold">WhatsApp settings</h2>
+      <label for="mode" class="mb-1 block text-sm font-medium">Open WhatsApp with</label>
+      <select id="mode" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30">
+        <option value="web">WhatsApp Web (web.whatsapp.com)</option>
+        <option value="app">WhatsApp desktop / mobile app</option>
+      </select>
+      <span id="modeSaved" class="ml-3 hidden text-sm text-emerald-600">Saved</span>
+
+      <div class="mt-5 space-y-3 border-t border-slate-100 pt-4">
+        <div>
+          <label for="company" class="mb-1 block text-sm font-medium">My company name</label>
+          <input id="company" maxlength="100" placeholder="e.g. Probal Dip Software"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+        </div>
+        <div>
+          <label for="contact" class="mb-1 block text-sm font-medium">My contact (phone / link)</label>
+          <input id="contact" maxlength="300" placeholder="e.g. 01XXXXXXXXX or https://your-demo-link.com"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+        </div>
+        <p class="text-xs text-slate-500">Use <code>{company}</code> and <code>{contact}</code> in a template; they are filled from here when you send. Change them once and every template updates.</p>
+        <div class="flex items-center gap-3">
+          <button id="contactBtn" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Save</button>
+          <span id="contactSaved" class="text-sm"></span>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid gap-6 lg:grid-cols-5">
+      <!-- Editor -->
+      <section class="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-5">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 id="formTitle" class="text-base font-semibold">New template</h2>
+          <button id="newBtn" class="hidden text-sm font-medium text-brand-600 hover:underline">+ New template</button>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label for="title" class="mb-1 block text-sm font-medium">Template name</label>
+            <input id="title" maxlength="100" placeholder="e.g. First offer"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+          </div>
+          <div>
+            <label for="body" class="mb-1 block text-sm font-medium">Message</label>
+            <textarea id="body" rows="8" maxlength="2000" placeholder="Hello {name}, ..."
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></textarea>
+            <p class="mt-2 text-xs text-slate-500">Click to insert a field. It is replaced with each business's own data when you send.</p>
+            <div id="chips" class="mt-2 flex flex-wrap gap-2"></div>
+          </div>
+          <div>
+            <p class="mb-1 text-sm font-medium">Preview <span id="previewWho" class="font-normal text-slate-400"></span></p>
+            <div id="preview" class="min-h-[3rem] whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700"></div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="saveBtn" class="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">Save template</button>
+            <span id="msg" class="text-sm"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- List -->
+      <section class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-5">
+        <h2 class="mb-4 text-base font-semibold">Saved templates</h2>
+        <ul id="list" class="space-y-3"></ul>
+        <p id="empty" class="hidden text-sm text-slate-500">No templates yet. Without one, messages start with "Hello {name}".</p>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    // Fields that come from the saved business record
+    const FIELDS = [
+      ['name', 'Business name'], ['phone', 'Phone'], ['address', 'Address'],
+      ['business_type', 'Business type'], ['district', 'District'], ['thana', 'Thana'], ['map_url', 'Map link'],
+      ['company', 'My company (from settings)'], ['contact', 'My contact (from settings)'],
+    ];
+    let editingId = null;
+    let sample = { name: 'Rahman Tiles', phone: '01712345678', address: 'House 12, Road 4, Dhanmondi', business_type: 'Tiles showroom', district: 'Dhaka', thana: 'Dhanmondi', map_url: 'https://www.google.com/maps/place/...' };
+
+    const fill = (tpl, r) => tpl.replace(/\{(\w+)\}/g, (m, k) => (k in r ? r[k] ?? '' : m));
+
+    function flash(el, text, cls) {
+      el.textContent = text;
+      el.className = 'text-sm ' + cls;
+      setTimeout(() => (el.textContent = ''), 2500);
+    }
+
+    function renderPreview() {
+      $('preview').textContent = fill($('body').value, sample) || 'Your message preview appears here.';
+    }
+
+    function resetForm() {
+      editingId = null;
+      $('title').value = '';
+      $('body').value = '';
+      $('formTitle').textContent = 'New template';
+      $('newBtn').classList.add('hidden');
+      renderPreview();
+    }
+
+    FIELDS.forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rounded-full border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50';
+      b.innerHTML = '<code></code> <span class="text-slate-400"></span>';
+      b.children[0].textContent = '{' + key + '}';
+      b.children[1].textContent = label;
+      b.onclick = () => {
+        const t = $('body');
+        const ins = '{' + key + '}';
+        t.setRangeText(ins, t.selectionStart, t.selectionEnd, 'end');
+        t.focus();
+        renderPreview();
+      };
+      $('chips').appendChild(b);
+    });
+
+    async function load() {
+      const { templates } = await fetch('/api/templates').then((r) => r.json());
+      const ul = $('list');
+      ul.innerHTML = '';
+      templates.forEach((t) => {
+        const li = document.createElement('li');
+        li.className = 'rounded-lg border border-slate-200 p-3';
+        const head = document.createElement('div');
+        head.className = 'mb-1 flex items-center justify-between gap-2';
+        const title = document.createElement('strong');
+        title.className = 'text-sm';
+        title.textContent = t.title;
+        const actions = document.createElement('div');
+        actions.className = 'flex gap-3 text-xs';
+        const edit = document.createElement('button');
+        edit.textContent = 'Edit';
+        edit.className = 'text-brand-600 hover:underline';
+        edit.onclick = () => {
+          editingId = t.id;
+          $('title').value = t.title;
+          $('body').value = t.body;
+          $('formTitle').textContent = 'Edit template';
+          $('newBtn').classList.remove('hidden');
+          renderPreview();
+          $('body').focus();
+        };
+        const del = document.createElement('button');
+        del.textContent = 'Delete';
+        del.className = 'text-red-600 hover:underline';
+        del.onclick = async () => {
+          if (!confirm(`Delete the template "${t.title}"?`)) return;
+          await fetch('/api/templates/' + t.id, { method: 'DELETE' });
+          if (editingId === t.id) resetForm();
+          load();
+        };
+        actions.append(edit, del);
+        head.append(title, actions);
+        const body = document.createElement('p');
+        body.className = 'whitespace-pre-wrap text-sm text-slate-600';
+        body.textContent = t.body;
+        li.append(head, body);
+        ul.appendChild(li);
+      });
+      $('empty').classList.toggle('hidden', templates.length > 0);
+    }
+
+    $('saveBtn').addEventListener('click', async () => {
+      const res = await fetch(editingId ? '/api/templates/' + editingId : '/api/templates', {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: $('title').value, body: $('body').value }),
+      });
+      if (res.ok) {
+        flash($('msg'), 'Saved', 'text-emerald-600');
+        if (!editingId) resetForm();
+        load();
+      } else flash($('msg'), (await res.json().catch(() => ({}))).error || 'Could not save.', 'text-red-600');
+    });
+
+    $('newBtn').addEventListener('click', resetForm);
+    $('body').addEventListener('input', renderPreview);
+
+    $('mode').addEventListener('change', async () => {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ whatsappMode: $('mode').value }),
+      });
+      $('modeSaved').classList.remove('hidden');
+      setTimeout(() => $('modeSaved').classList.add('hidden'), 2000);
+    });
+
+    $('contactBtn').addEventListener('click', async () => {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company: $('company').value, contact: $('contact').value }),
+      });
+      if (res.ok) { sample.contact = $('contact').value.trim(); sample.company = $('company').value.trim(); renderPreview(); }
+      flash($('contactSaved'), res.ok ? 'Saved' : 'Could not save.', res.ok ? 'text-emerald-600' : 'text-red-600');
+    });
+
+    let mine = { company: '', contact: '' };
+    fetch('/api/settings').then((r) => r.json()).then((s) => {
+      $('mode').value = s.whatsappMode;
+      $('contact').value = s.contact;
+      $('company').value = s.company;
+      mine = { company: s.company, contact: s.contact };
+      Object.assign(sample, mine);
+      renderPreview();
+    });
+    // Preview with a real saved business when there is one
+    fetch('/api/businesses').then((r) => r.json()).then(({ rows }) => {
+      if (rows[0]) { sample = { ...rows[0], ...mine }; $('previewWho').textContent = '(using "' + rows[0].name + '")'; }
+      renderPreview();
+    });
+    load();
+    renderPreview();
+  </script>
+</body>
+</html>

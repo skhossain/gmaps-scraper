@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"] },
+      colors: { brand: { 50: "#ecf8f5", 600: "#0f766e", 700: "#0b5f59" } } } } };
+  </script>
+  <style> body { background: #f5f6f4; } </style>
+  <title>Users</title>
+</head>
+<body class="font-sans text-slate-800 antialiased">
+  <header class="border-b border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+      <h1 class="text-lg font-semibold">Users</h1>
+      <a href="/" class="text-sm font-medium text-brand-600 hover:underline">&larr; Back to collector</a>
+    </div>
+  </header>
+  <main class="mx-auto max-w-6xl space-y-6 px-4 py-6">
+    <div class="grid gap-6 lg:grid-cols-5">
+      <section class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-5">
+        <h2 class="mb-4 text-base font-semibold">Add user</h2>
+        <form id="form" class="space-y-4">
+          <input id="username" placeholder="Username" autocomplete="off" required
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+          <input id="password" type="password" placeholder="Password (min 8 chars)" autocomplete="new-password" required
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+          <select id="role" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="user">User</option>
+            <option value="admin">Admin (can manage users)</option>
+          </select>
+          <p id="msg" class="hidden text-sm"></p>
+          <button class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Create user</button>
+        </form>
+      </section>
+      <section class="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-5">
+        <h2 class="mb-4 text-base font-semibold">All users</h2>
+        <table class="w-full text-left text-sm">
+          <thead class="text-xs uppercase text-slate-500"><tr><th class="py-2">Username</th><th>Role</th><th>Created</th><th></th></tr></thead>
+          <tbody id="rows" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const json = { 'Content-Type': 'application/json' };
+    let me;
+
+    function msg(text, ok) {
+      $('msg').textContent = text;
+      $('msg').className = 'text-sm ' + (ok ? 'text-emerald-600' : 'text-red-600');
+    }
+
+    async function load() {
+      me = await fetch('/api/me').then((r) => r.json());
+      const res = await fetch('/api/users');
+      if (!res.ok) return (location.href = '/');
+      const { users } = await res.json();
+      $('rows').innerHTML = users.map((u) => `
+        <tr>
+          <td class="py-2 font-medium">${esc(u.username)}${u.id === me.id ? ' <span class="text-xs text-slate-400">(you)</span>' : ''}</td>
+          <td>${esc(u.role)}</td>
+          <td class="text-slate-500">${esc(u.created_at)}</td>
+          <td class="space-x-3 text-right">
+            <button data-pw="${u.id}" class="text-brand-600 hover:underline">Reset password</button>
+            ${u.id === me.id ? '' : `<button data-del="${u.id}" data-name="${esc(u.username)}" class="text-red-600 hover:underline">Delete</button>`}
+          </td>
+        </tr>`).join('');
+    }
+
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const res = await fetch('/api/users', { method: 'POST', headers: json, body: JSON.stringify({
+        username: $('username').value.trim(), password: $('password').value, role: $('role').value }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return msg(data.error || 'Failed.', false);
+      msg('User created.', true);
+      $('form').reset();
+      load();
+    });
+
+    $('rows').addEventListener('click', async (e) => {
+      const { pw, del, name } = e.target.dataset;
+      if (pw) {
+        const password = prompt('New password (min 8 chars):');
+        if (!password) return;
+        const res = await fetch(`/api/users/${pw}/password`, { method: 'PUT', headers: json, body: JSON.stringify({ password }) });
+        alert(res.ok ? 'Password updated. That user was signed out.' : (await res.json()).error);
+        if (res.ok && Number(pw) === me.id) location.href = '/login.html';
+      }
+      if (del && confirm(`Delete user "${name}"?`)) {
+        const res = await fetch(`/api/users/${del}`, { method: 'DELETE' });
+        if (!res.ok) alert((await res.json()).error);
+        load();
+      }
+    });
+    load();
+  </script>
+</body>
+</html>

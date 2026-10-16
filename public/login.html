@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"] },
+      colors: { brand: { 50: "#ecf8f5", 600: "#0f766e", 700: "#0b5f59" } } } } };
+  </script>
+  <style> body { background: #f5f6f4; } </style>
+  <title>Sign in</title>
+</head>
+<body class="font-sans text-slate-800 antialiased">
+  <main class="mx-auto flex min-h-screen max-w-sm items-center px-4">
+    <form id="form" class="w-full space-y-4 rounded-xl border border-slate-200 bg-white p-6">
+      <h1 class="text-lg font-semibold">Business Collector</h1>
+      <div>
+        <label for="username" class="mb-1 block text-sm font-medium">Username</label>
+        <input id="username" autocomplete="username" required
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+      </div>
+      <div>
+        <label for="password" class="mb-1 block text-sm font-medium">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required
+          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+      </div>
+      <p id="error" class="hidden text-sm text-red-600"></p>
+      <button class="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Sign in</button>
+    </form>
+  </main>
+  <script>
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('error');
+      err.classList.add('hidden');
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value }),
+      });
+      if (res.ok) return (location.href = '/');
+      err.textContent = (await res.json().catch(() => ({}))).error || 'Login failed.';
+      err.classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>
