@@ -3,6 +3,8 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const {
   insertBusiness, list, listPage, listBusinessTypes,
+  NOTE_KINDS, getBusiness, setBusinessActive, createMessage, setMessageStatus, deleteMessage, listMessages,
+  createNote, deleteNote, listNotes, listCrmBusinesses,
   listTemplates, createTemplate, updateTemplate, deleteTemplate, getSettings, saveSetting,
 } = require('./database');
 const auth = require('./auth');
@@ -348,6 +350,7 @@ const filtersFrom = (q) => ({
   district: String(q.district || ''),
   thana: String(q.thana || ''),
   type: String(q.type || ''),
+  status: ['active', 'inactive', 'all'].includes(q.status) ? q.status : 'active',
 });
 
 app.get('/api/businesses', (req, res) => {
@@ -420,6 +423,60 @@ app.put('/api/settings', (req, res) => {
   }
   if (contact !== undefined) saveSetting('contact', String(contact).trim().slice(0, 300));
   if (company !== undefined) saveSetting('company', String(company).trim().slice(0, 100));
+  res.json({ ok: true });
+});
+
+/* ---------- CRM: message log + contact notes ---------- */
+const notFound = () => Object.assign(new Error('Not found.'), { status: 404 });
+
+// Called when WhatsApp/SMS is opened: the message is stored as a draft until someone marks it sent.
+app.post('/api/messages', handle((req, res) => {
+  const channel = String(req.body.channel || '');
+  const body = String(req.body.body || '').trim().slice(0, 4000);
+  if (!['whatsapp', 'sms'].includes(channel) || !body) throw Object.assign(new Error('Channel and message are required.'), { status: 400 });
+  if (!getBusiness(Number(req.body.businessId))) throw notFound();
+  res.json({ ok: true, id: createMessage(Number(req.body.businessId), channel, body, req.user.id) });
+}));
+
+app.put('/api/messages/:id/status', handle((req, res) => {
+  const status = String(req.body.status || '');
+  if (!['draft', 'sent'].includes(status)) throw Object.assign(new Error('Invalid status.'), { status: 400 });
+  if (!setMessageStatus(Number(req.params.id), status)) throw notFound();
+  res.json({ ok: true });
+}));
+
+// Businesses are deactivated instead of deleted; there is intentionally no delete route.
+app.put('/api/businesses/:id/active', handle((req, res) => {
+  if (!setBusinessActive(Number(req.params.id), !!req.body.active)) throw notFound();
+  res.json({ ok: true });
+}));
+
+app.delete('/api/messages/:id', (req, res) => {
+  deleteMessage(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.get('/api/crm/businesses', (req, res) => {
+  res.json({ businesses: listCrmBusinesses(String(req.query.search || '').trim()) });
+});
+
+app.get('/api/crm/businesses/:id', handle((req, res) => {
+  const business = getBusiness(Number(req.params.id));
+  if (!business) throw notFound();
+  res.json({ business, messages: listMessages(business.id), notes: listNotes(business.id), noteKinds: NOTE_KINDS });
+}));
+
+app.post('/api/crm/businesses/:id/notes', handle((req, res) => {
+  const business = getBusiness(Number(req.params.id));
+  if (!business) throw notFound();
+  const note = String(req.body.note || '').trim().slice(0, 4000);
+  const kind = NOTE_KINDS.includes(req.body.kind) ? req.body.kind : 'note';
+  if (!note) throw Object.assign(new Error('Note is required.'), { status: 400 });
+  res.json({ ok: true, id: createNote(business.id, kind, note, req.user.id) });
+}));
+
+app.delete('/api/notes/:id', (req, res) => {
+  deleteNote(Number(req.params.id));
   res.json({ ok: true });
 });
 

@@ -22,15 +22,30 @@
   </script>
   <style>
     body { background: #f5f6f4; }
+    @media (max-width: 767px) {
+      /* Table rows become cards on phones */
+      #dataTable thead { display: none; }
+      #dataTable, #dataTable tbody { display: block; }
+      #tableBody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.5rem; padding: 0.875rem 0.25rem; }
+      #tableBody td { display: block; padding: 0 !important; min-width: 0 !important; }
+      #tableBody td.m-full { flex: 0 0 100%; }
+      #tableBody td.m-hide { display: none; }
+      #tableBody td.m-chip { border-radius: 9999px; background: #f1f5f9; padding: 0.125rem 0.625rem !important; font-size: 0.75rem; color: #475569; }
+      #tableBody td.m-actions { flex: 0 0 auto; margin-top: 0.375rem; }
+      #tableBody td.m-actions button { padding: 0.5rem 0.875rem; font-size: 0.875rem; }
+      #tableBody td.m-phone { font-size: 0.95rem; }
+      #filterRow > * { width: 100%; }
+    }
     #log::-webkit-scrollbar { width: 8px; }
     #log::-webkit-scrollbar-thumb { background: #3a4a47; border-radius: 4px; }
   </style>
 </head>
 <body class="font-sans text-slate-800 antialiased">
   <header class="border-b border-slate-200 bg-white">
-    <div class="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+    <div class="mx-auto max-w-[1920px] px-3 sm:px-4 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <h1 class="text-lg font-semibold">Business Collector</h1>
-      <div class="flex items-center gap-4">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <a href="/crm.html" class="text-sm font-medium text-brand-600 hover:underline">CRM</a>
         <a href="/templates.html" class="text-sm font-medium text-brand-600 hover:underline">Message templates</a>
         <span id="userNav" class="flex items-center gap-4 text-sm"></span>
 <script>
@@ -47,10 +62,10 @@
     </div>
   </header>
 
-  <main class="mx-auto max-w-6xl space-y-6 px-4 py-6">
+  <main class="mx-auto max-w-[1920px] space-y-4 px-3 py-4 sm:space-y-6 sm:px-4 sm:py-6">
     <div class="grid gap-6 lg:grid-cols-5">
       <!-- Controls -->
-      <section class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-5">
+      <section class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
         <h2 class="mb-4 text-base font-semibold">New search</h2>
         <div class="space-y-4">
           <div>
@@ -89,7 +104,7 @@
       </section>
 
       <!-- Progress + logs -->
-      <section class="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-5">
+      <section class="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
         <div class="mb-3 flex items-baseline justify-between">
           <h2 class="text-base font-semibold">Progress</h2>
           <span id="progressText" class="text-sm text-slate-500">0 / 0 listings</span>
@@ -102,17 +117,17 @@
           <span>Skipped <strong id="statSkipped">0</strong></span>
           <span>Duplicates <strong id="statDup">0</strong></span>
         </div>
-        <div id="log" class="mt-4 h-72 overflow-y-auto rounded-lg bg-[#16201e] p-3 font-mono text-xs leading-relaxed text-slate-300">
+        <div id="log" class="mt-4 h-48 sm:h-72 overflow-y-auto rounded-lg bg-[#16201e] p-3 font-mono text-xs leading-relaxed text-slate-300">
           <div class="text-slate-500">Logs will appear here once a search starts.</div>
         </div>
       </section>
     </div>
 
     <!-- Data -->
-    <section class="rounded-xl border border-slate-200 bg-white p-5">
+    <section class="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
       <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="text-base font-semibold">Saved businesses <span id="totalCount" class="ml-1 text-sm font-normal text-slate-500"></span></h2>
-        <div class="flex flex-col gap-2 sm:flex-row">
+        <div id="filterRow" class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <input id="search" type="search" placeholder="Search name, phone, address"
             class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
           <select id="filterType"
@@ -121,6 +136,10 @@
             class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></select>
           <select id="filterThana"
             class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></select>
+          <select id="filterStatus"
+            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30">
+            <option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All</option>
+          </select>
           <button id="exportBtn" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">Download CSV</button>
         </div>
       </div>
@@ -131,7 +150,7 @@
         <a href="/templates.html" class="text-sm font-medium text-brand-600 hover:underline">Manage templates</a>
       </div>
       <div class="overflow-x-auto">
-        <table class="min-w-full text-left text-sm">
+        <table id="dataTable" class="min-w-full text-left text-sm">
           <thead class="border-b border-slate-200 text-slate-500">
             <tr>
               <th class="py-2 pr-4 font-medium">Name</th>
@@ -141,7 +160,9 @@
               <th class="py-2 pr-4 font-medium">District</th>
               <th class="py-2 pr-4 font-medium">Thana</th>
               <th class="py-2 pr-4 font-medium">Map</th>
-              <th class="py-2 font-medium">Send message</th>
+              <th class="py-2 pr-4 font-medium">Send message</th>
+              <th class="py-2 pr-4 font-medium">Sent</th>
+              <th class="py-2 font-medium">Status</th>
             </tr>
           </thead>
           <tbody id="tableBody" class="divide-y divide-slate-100"></tbody>
@@ -289,9 +310,10 @@
     $('stopBtn').addEventListener('click', () => fetch('/api/stop', { method: 'POST' }));
 
     /* ---------- Data table ---------- */
-    function cell(text, cls = '') {
+    // `m` = extra classes that only matter in the phone card layout (see the style block)
+    function cell(text, cls = '', m = '') {
       const td = document.createElement('td');
-      td.className = 'py-2.5 pr-4 align-top ' + cls;
+      td.className = 'py-2.5 pr-4 align-top ' + cls + ' ' + m;
       td.textContent = text;
       return td;
     }
@@ -302,7 +324,7 @@
     if (!$('perPage').value) $('perPage').value = '100';
 
     const filterParams = () =>
-      new URLSearchParams({ search: $('search').value.trim(), district: filterSel.value, thana: filterThanaSel.value, type: filterType.value });
+      new URLSearchParams({ search: $('search').value.trim(), district: filterSel.value, thana: filterThanaSel.value, type: filterType.value, status: $('filterStatus').value });
 
     function fillTypes(types) {
       const keep = filterType.value;
@@ -325,14 +347,20 @@
       body.innerHTML = '';
       rows.forEach((r) => {
         const tr = document.createElement('tr');
-        tr.appendChild(cell(r.name, 'font-medium'));
-        tr.appendChild(cell(r.phone, 'whitespace-nowrap'));
-        tr.appendChild(cell(r.address, 'min-w-[16rem]'));
-        tr.appendChild(cell(r.business_type));
-        tr.appendChild(cell(r.district));
-        tr.appendChild(cell(r.thana || '-'));
+        if (!r.active) tr.className = 'bg-slate-50 text-slate-400';
+        tr.appendChild(cell(r.name, 'font-medium', 'm-full text-base'));
+        const phoneTd = cell('', 'whitespace-nowrap', 'm-full m-phone');
+        const tel = document.createElement('a');
+        tel.href = 'tel:+' + waNumber(r.phone);
+        tel.textContent = r.phone;
+        phoneTd.appendChild(tel);
+        tr.appendChild(phoneTd);
+        tr.appendChild(cell(r.address, 'min-w-[16rem]', 'm-full text-slate-500'));
+        tr.appendChild(cell(r.business_type, '', 'm-chip'));
+        tr.appendChild(cell(r.district, '', 'm-chip'));
+        tr.appendChild(cell(r.thana || '-', '', r.thana ? 'm-chip' : 'm-hide'));
         const td = document.createElement('td');
-        td.className = 'py-2.5 pr-4 align-top';
+        td.className = 'py-2.5 pr-4 align-top m-chip';
         const a = document.createElement('a');
         a.href = r.map_url;
         a.target = '_blank';
@@ -343,7 +371,7 @@
         tr.appendChild(td);
         const wa = document.createElement('td');
         wa.className = 'py-2.5 align-top';
-        wa.className += ' whitespace-nowrap space-x-2';
+        wa.className += ' whitespace-nowrap space-x-2 m-actions';
         const btn = document.createElement('button');
         btn.textContent = 'WhatsApp';
         btn.className = 'rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700';
@@ -352,8 +380,41 @@
         sms.textContent = 'SMS';
         sms.className = 'rounded-md bg-slate-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-slate-900';
         sms.addEventListener('click', () => openSms(r));
+        if (!r.active) { btn.disabled = sms.disabled = true; btn.classList.add('opacity-40'); sms.classList.add('opacity-40'); }
         wa.append(btn, sms);
+        wa.classList.add('pr-4');
         tr.appendChild(wa);
+        const sent = document.createElement('td');
+        sent.className = 'py-2.5 pr-4 align-top whitespace-nowrap m-actions';
+        const count = document.createElement('a');
+        count.href = '/crm.html?business=' + r.id;
+        count.title = 'Open message history';
+        count.textContent = r.sent_count;
+        count.className = 'inline-block min-w-[2rem] rounded-md border border-slate-300 px-2 py-1 text-center text-xs font-semibold hover:bg-slate-50 max-md:px-3 max-md:py-2 max-md:text-sm ' +
+          (r.sent_count ? 'text-brand-700' : 'text-slate-400');
+        sent.appendChild(count);
+        if (r.draft_count) {
+          const d = document.createElement('span');
+          d.textContent = `+${r.draft_count} draft`;
+          d.className = 'ml-1.5 text-xs text-amber-600';
+          sent.appendChild(d);
+        }
+        tr.appendChild(sent);
+        const st = document.createElement('td');
+        st.className = 'py-2.5 align-top whitespace-nowrap m-actions';
+        const tog = document.createElement('button');
+        tog.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>';
+        tog.title = tog.ariaLabel = r.active ? 'Active - click to deactivate' : 'Inactive - click to activate';
+        tog.className = 'rounded-md p-1.5 hover:bg-slate-100 max-md:p-2.5 max-md:border max-md:border-slate-200 ' + (r.active ? 'text-emerald-600' : 'text-slate-400');
+        tog.addEventListener('click', async () => {
+          if (r.active && !confirm(`Deactivate "${r.name}"? It can be activated again later.`)) return;
+          await fetch(`/api/businesses/${r.id}/active`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !r.active }),
+          });
+          loadTable();
+        });
+        st.appendChild(tog);
+        tr.appendChild(st);
         body.appendChild(tr);
       });
       $('emptyState').classList.toggle('hidden', rows.length > 0);
@@ -411,9 +472,19 @@
       return tpl.replace(/\{(\w+)\}/g, (m, k) => (k in data ? data[k] ?? '' : m));
     }
 
+    // Records the message as a draft; it counts as sent only after it is marked sent on the CRM page.
+    function logDraft(r, channel) {
+      return fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId: r.id, channel, body: buildMessage(r) }),
+      }).then(loadTable).catch(() => {});
+    }
+
     async function openWhatsApp(r) {
       await loadWhatsAppConfig(); // pick up template/setting edits made on the other page
       rememberTemplate();
+      await logDraft(r, 'whatsapp');
       const q = `phone=${waNumber(r.phone)}&text=${encodeURIComponent(buildMessage(r))}`;
       if (whatsappMode === 'app') window.location.href = 'whatsapp://send?' + q;
       else window.open('https://web.whatsapp.com/send?' + q, 'whatsapp_web');
@@ -422,6 +493,7 @@
     async function openSms(r) {
       await loadWhatsAppConfig();
       rememberTemplate();
+      await logDraft(r, 'sms');
       window.location.href = `sms:+${waNumber(r.phone)}?body=${encodeURIComponent(buildMessage(r))}`;
     }
 
@@ -431,7 +503,7 @@
       searchTimer = setTimeout(reload, 300);
     });
     const reload = () => { page = 1; loadTable(); };
-    [filterSel, filterThanaSel, filterType].forEach((el) => el.addEventListener('change', reload));
+    [filterSel, filterThanaSel, filterType, $('filterStatus')].forEach((el) => el.addEventListener('change', reload));
     $('perPage').addEventListener('change', () => {
       try { localStorage.setItem('perPage', $('perPage').value); } catch {}
       reload();
@@ -443,6 +515,9 @@
       const params = filterParams();
       window.location.href = '/api/export.csv?' + params;
     });
+
+    // Coming back from WhatsApp/the CRM page: refresh the sent/draft counts.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) loadTable(); });
 
     loadTable();
     loadWhatsAppConfig();

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans: ["Manrope", "ui-sans-serif", "system-ui", "sans-serif"] },
+      colors: { brand: { 50: "#ecf8f5", 600: "#0f766e", 700: "#0b5f59" } } } } };
+  </script>
+  <style>
+    body { background: #f5f6f4; }
+    /* Phones: show either the business list or one business, never both */
+    @media (max-width: 1023px) {
+      main.viewing #listSection { display: none; }
+      main:not(.viewing) #detailCol { display: none; }
+    }
+  </style>
+</head>
+<body class="font-sans text-slate-800 antialiased">
+  <header class="border-b border-slate-200 bg-white">
+    <div class="mx-auto max-w-[1920px] px-3 sm:px-4 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <h1 class="text-lg font-semibold">CRM</h1>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <a href="/templates.html" class="text-sm font-medium text-brand-600 hover:underline">Message templates</a>
+        <span id="userNav" class="flex items-center gap-4 text-sm"></span>
+        <a href="/" class="text-sm font-medium text-brand-600 hover:underline">&larr; Back to collector</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="mx-auto max-w-[1920px] px-3 py-4 sm:px-4 sm:py-6 space-y-4">
+    <input id="search" type="search" placeholder="Search any business by name or mobile number"
+      class="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-base sm:py-2.5 sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+
+    <div class="grid gap-6 lg:grid-cols-5">
+      <!-- Business list -->
+      <section id="listSection" class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+        <h2 id="listTitle" class="mb-3 text-sm font-semibold text-slate-500"></h2>
+        <ul id="list" class="max-h-[70vh] divide-y divide-slate-100 overflow-y-auto"></ul>
+        <p id="listEmpty" class="hidden py-6 text-center text-sm text-slate-500"></p>
+      </section>
+
+      <!-- Detail -->
+      <section id="detailCol" class="lg:col-span-3 space-y-4 sm:space-y-6">
+        <div id="placeholder" class="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+          Select a business from the list, or search above.
+        </div>
+        <div id="detail" class="hidden space-y-4 sm:space-y-6">
+          <button id="backBtn" type="button" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium lg:hidden">&larr; All businesses</button>
+          <div class="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+            <h2 id="bName" class="text-lg font-semibold"></h2>
+            <p id="bPhone" class="mt-1 text-sm font-medium"></p>
+            <p id="bAddress" class="mt-1 text-sm text-slate-500"></p>
+            <p id="bMeta" class="mt-1 text-xs text-slate-400"></p>
+            <p id="bInactive" class="mt-2 hidden text-sm font-semibold text-amber-700">Inactive</p>
+            <button id="bToggle" type="button" class="mt-2 mr-3 inline-flex rounded-md p-1.5 hover:bg-slate-100"></button>
+            <a id="bMap" target="_blank" rel="noopener" class="mt-2 inline-block text-sm text-brand-600 hover:underline">Open in Maps</a>
+          </div>
+
+          <div class="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+            <h3 class="mb-3 text-base font-semibold">Messages <span id="msgCount" class="ml-1 text-sm font-normal text-slate-500"></span></h3>
+            <ul id="messages" class="space-y-3"></ul>
+            <p id="msgEmpty" class="hidden text-sm text-slate-500">No messages yet. Use the WhatsApp / SMS buttons on the collector page.</p>
+          </div>
+
+          <div class="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+            <h3 class="mb-3 text-base font-semibold">Contact log</h3>
+            <form id="noteForm" class="mb-4 space-y-2">
+              <div class="flex flex-col gap-2 sm:flex-row">
+                <select id="noteKind" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"></select>
+                <input id="noteText" required maxlength="4000" placeholder="What happened? e.g. Called, interested, call back Sunday"
+                  class="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+                <button class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Add</button>
+              </div>
+            </form>
+            <ul id="notes" class="space-y-3"></ul>
+            <p id="noteEmpty" class="hidden text-sm text-slate-500">No contact notes yet.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    fetch('/api/me').then((r) => r.json()).then((me) => {
+      document.getElementById('userNav').innerHTML =
+        (me.role === 'admin' ? '<a href="/users.html" class="font-medium text-brand-600 hover:underline">Users</a>' : '') +
+        '<span class="text-slate-500">' + me.username.replace(/[<>&"]/g, '') + '</span>' +
+        '<button id="logoutBtn" class="font-medium text-slate-600 hover:underline">Log out</button>';
+      document.getElementById('logoutBtn').onclick = async () => { await fetch('/api/logout', { method: 'POST' }); location.href = '/login.html'; };
+    });
+
+    const $ = (id) => document.getElementById(id);
+    const json = { 'Content-Type': 'application/json' };
+    const api = (method, url, body) => fetch(url, { method, headers: json, body: body && JSON.stringify(body) });
+    // SQLite CURRENT_TIMESTAMP is UTC without a zone marker
+    const when = (t) => (t ? new Date(t.replace(' ', 'T') + 'Z').toLocaleString() : '');
+    const KIND_LABEL = { note: 'Note', call: 'Call', meeting: 'Meeting', whatsapp: 'WhatsApp', sms: 'SMS', email: 'Email' };
+
+    let selectedId = Number(new URLSearchParams(location.search).get('business')) || null;
+
+    function el(tag, cls, text) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function button(label, cls, onClick) {
+      const b = el('button', cls, label);
+      b.type = 'button';
+      b.addEventListener('click', onClick);
+      return b;
+    }
+
+    /* ---------- business list ---------- */
+    async function loadList() {
+      const search = $('search').value.trim();
+      const { businesses } = await fetch('/api/crm/businesses?search=' + encodeURIComponent(search)).then((r) => r.json());
+      $('listTitle').textContent = search ? `Search results (${businesses.length})` : `Contacted businesses (${businesses.length})`;
+      $('listEmpty').textContent = search ? 'No business matches.' : 'No messages or notes yet.';
+      $('listEmpty').classList.toggle('hidden', businesses.length > 0);
+      const list = $('list');
+      list.innerHTML = '';
+      businesses.forEach((b) => {
+        const li = el('li');
+        const btn = el('button', 'block w-full px-2 py-3 text-left hover:bg-slate-50 ' + (b.id === selectedId ? 'bg-brand-50' : ''));
+        btn.type = 'button';
+        btn.appendChild(el('div', 'text-sm font-medium' + (b.active ? '' : ' text-slate-400'), b.name + (b.active ? '' : ' (inactive)')));
+        btn.appendChild(el('div', 'text-xs text-slate-500', b.phone));
+        const stats = [`${b.sent_count} sent`];
+        if (b.draft_count) stats.push(`${b.draft_count} draft`);
+        if (b.note_count) stats.push(`${b.note_count} notes`);
+        btn.appendChild(el('div', 'mt-0.5 text-xs text-slate-400', stats.join(' · ')));
+        btn.addEventListener('click', () => select(b.id));
+        li.appendChild(btn);
+        list.appendChild(li);
+      });
+    }
+
+    /* ---------- detail ---------- */
+    async function select(id) {
+      selectedId = id;
+      $('main').classList.add('viewing');
+      history.replaceState(null, '', '?business=' + id);
+      await loadDetail();
+      loadList();
+    }
+
+    async function loadDetail() {
+      if (!selectedId) return;
+      const res = await fetch('/api/crm/businesses/' + selectedId);
+      if (!res.ok) { selectedId = null; $('main').classList.remove('viewing'); return; }
+      const { business: b, messages, notes, noteKinds } = await res.json();
+      $('placeholder').classList.add('hidden');
+      $('detail').classList.remove('hidden');
+      $('bName').textContent = b.name;
+      $('bPhone').textContent = b.phone;
+      $('bAddress').textContent = b.address;
+      $('bMeta').textContent = [b.business_type, b.thana, b.district].filter(Boolean).join(' · ');
+      $('bMap').href = b.map_url;
+      $('bInactive').classList.toggle('hidden', !!b.active);
+      const tog = $('bToggle');
+      tog.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>';
+      tog.title = tog.ariaLabel = b.active ? 'Active - click to deactivate' : 'Inactive - click to activate';
+      tog.classList.toggle('text-emerald-600', !!b.active);
+      tog.classList.toggle('text-slate-400', !b.active);
+      $('bToggle').onclick = async () => {
+        if (b.active && !confirm(`Deactivate "${b.name}"? It can be activated again later.`)) return;
+        await api('PUT', `/api/businesses/${b.id}/active`, { active: !b.active });
+        refresh();
+      };
+
+      if (!$('noteKind').options.length) noteKinds.forEach((k) => $('noteKind').appendChild(new Option(KIND_LABEL[k] || k, k)));
+
+      const sent = messages.filter((m) => m.status === 'sent').length;
+      $('msgCount').textContent = `${sent} sent` + (messages.length > sent ? `, ${messages.length - sent} draft` : '');
+      $('msgEmpty').classList.toggle('hidden', messages.length > 0);
+      const ml = $('messages');
+      ml.innerHTML = '';
+      messages.forEach((m) => {
+        const isSent = m.status === 'sent';
+        const li = el('li', 'rounded-lg border p-3 ' + (isSent ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'));
+        const head = el('div', 'mb-1 flex flex-wrap items-center gap-2 text-xs');
+        head.appendChild(el('span', 'rounded-full px-2 py-0.5 font-semibold ' + (m.channel === 'whatsapp' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'), m.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'));
+        head.appendChild(el('span', 'rounded-full px-2 py-0.5 font-semibold ' + (isSent ? 'bg-emerald-600 text-white' : 'bg-amber-200 text-amber-900'), isSent ? 'Sent' : 'Draft'));
+        head.appendChild(el('span', 'text-slate-500', when(isSent ? m.sent_at : m.created_at) + (m.username ? ' · ' + m.username : '')));
+        li.appendChild(head);
+        li.appendChild(el('p', 'whitespace-pre-wrap text-sm', m.body));
+        const actions = el('div', 'mt-2 flex gap-3 text-xs font-medium');
+        actions.appendChild(button(isSent ? 'Mark as draft' : 'Mark as sent',
+          isSent ? 'text-slate-600 hover:underline' : 'text-emerald-700 hover:underline',
+          async () => { await api('PUT', `/api/messages/${m.id}/status`, { status: isSent ? 'draft' : 'sent' }); refresh(); }));
+        actions.appendChild(button('Delete', 'text-red-600 hover:underline', async () => {
+          if (!confirm('Delete this message record?')) return;
+          await api('DELETE', '/api/messages/' + m.id);
+          refresh();
+        }));
+        li.appendChild(actions);
+        ml.appendChild(li);
+      });
+
+      $('noteEmpty').classList.toggle('hidden', notes.length > 0);
+      const nl = $('notes');
+      nl.innerHTML = '';
+      notes.forEach((n) => {
+        const li = el('li', 'rounded-lg border border-slate-200 p-3');
+        const head = el('div', 'mb-1 flex flex-wrap items-center gap-2 text-xs');
+        head.appendChild(el('span', 'rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand-700', KIND_LABEL[n.kind] || n.kind));
+        head.appendChild(el('span', 'text-slate-500', when(n.created_at) + (n.username ? ' · ' + n.username : '')));
+        li.appendChild(head);
+        li.appendChild(el('p', 'whitespace-pre-wrap text-sm', n.note));
+        li.appendChild(button('Delete', 'mt-2 text-xs font-medium text-red-600 hover:underline', async () => {
+          if (!confirm('Delete this note?')) return;
+          await api('DELETE', '/api/notes/' + n.id);
+          refresh();
+        }));
+        nl.appendChild(li);
+      });
+    }
+
+    const refresh = () => Promise.all([loadDetail(), loadList()]);
+
+    $('noteForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const note = $('noteText').value.trim();
+      if (!note || !selectedId) return;
+      await api('POST', `/api/crm/businesses/${selectedId}/notes`, { kind: $('noteKind').value, note });
+      $('noteText').value = '';
+      refresh();
+    });
+
+    $('backBtn').addEventListener('click', () => { $('main').classList.remove('viewing'); window.scrollTo(0, 0); });
+    let timer;
+    $('search').addEventListener('input', () => { $('main').classList.remove('viewing'); clearTimeout(timer); timer = setTimeout(loadList, 250); });
+    // Returning from WhatsApp: pick up newly saved drafts
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+
+    if (selectedId) $('main').classList.add('viewing');
+    loadList();
+    loadDetail();
+  </script>
+</body>
+</html>
