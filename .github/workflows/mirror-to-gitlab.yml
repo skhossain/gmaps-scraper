@@ -1,0 +1,36 @@
+name: Mirror to GitLab
+
+# Every push to GitHub (any branch or tag) is copied to GitLab.
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  workflow_dispatch: # lets you run it by hand from the Actions tab
+
+concurrency:
+  group: mirror-to-gitlab
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history, otherwise GitLab would receive a shallow copy
+          persist-credentials: false
+
+      - name: Push to GitLab
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          if [ -z "$GITLAB_TOKEN" ]; then
+            echo "::error::Secret GITLAB_TOKEN is not set (repo Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@gitlab.com/sk_hossain/gmaps-scraper.git"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            git push gitlab "refs/tags/${GITHUB_REF_NAME}"
+          else
+            git push gitlab "HEAD:refs/heads/${GITHUB_REF_NAME}"
+          fi
