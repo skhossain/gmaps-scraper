@@ -33,8 +33,13 @@
   </header>
 
   <main id="main" class="mx-auto max-w-[1920px] px-3 py-4 sm:px-4 sm:py-6 space-y-4">
-    <input id="search" type="search" placeholder="Search any business by name or mobile number"
-      class="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-base sm:py-2.5 sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+      <input id="search" type="search" placeholder="Search by name or mobile number" autocomplete="off"
+        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-base sm:col-span-2 sm:py-2.5 sm:text-sm lg:col-span-1 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+      <select id="filterType" class="rounded-lg border border-slate-300 bg-white px-3 py-3 text-base sm:py-2.5 sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></select>
+      <select id="filterDistrict" class="rounded-lg border border-slate-300 bg-white px-3 py-3 text-base sm:py-2.5 sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></select>
+      <select id="filterThana" class="rounded-lg border border-slate-300 bg-white px-3 py-3 text-base sm:py-2.5 sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></select>
+    </div>
 
     <div class="grid gap-6 lg:grid-cols-5">
       <!-- Business list -->
@@ -62,6 +67,20 @@
           </div>
 
           <div class="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+            <h3 class="mb-3 text-base font-semibold">Send message</h3>
+            <div class="space-y-2">
+              <select id="templateSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base sm:text-sm"></select>
+              <textarea id="composeText" rows="4" maxlength="4000" placeholder="Write a message, or pick a template"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></textarea>
+              <div class="flex flex-wrap items-center gap-2">
+                <button id="sendWa" type="button" class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">WhatsApp</button>
+                <button id="sendSms" type="button" class="rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-40">SMS</button>
+                <span id="composeHint" class="text-xs text-slate-500">Saved as a draft; mark it sent below once it really went out.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
             <h3 class="mb-3 text-base font-semibold">Messages <span id="msgCount" class="ml-1 text-sm font-normal text-slate-500"></span></h3>
             <ul id="messages" class="space-y-3"></ul>
             <p id="msgEmpty" class="hidden text-sm text-slate-500">No messages yet. Use the WhatsApp / SMS buttons on the collector page.</p>
@@ -85,8 +104,13 @@
     </div>
   </main>
 
+  <script src="/thanas.js"></script>
+  <script src="/shared.js"></script>
   <script>
+    let isAdmin = false; // only admins may delete sent messages / notes or revert a sent message
     fetch('/api/me').then((r) => r.json()).then((me) => {
+      isAdmin = me.role === 'admin';
+      refresh();
       document.getElementById('userNav').innerHTML =
         (me.role === 'admin' ? '<a href="/users.html" class="font-medium text-brand-600 hover:underline">Users</a>' : '') +
         '<span class="text-slate-500">' + me.username.replace(/[<>&"]/g, '') + '</span>' +
@@ -118,11 +142,29 @@
     }
 
     /* ---------- business list ---------- */
+    const filterType = $('filterType');
+    const filterDistrict = $('filterDistrict');
+    const filterThana = $('filterThana');
+    fillDistricts(filterDistrict, 'All districts');
+    fillThanas(filterThana, '', 'All thanas');
+    filterType.appendChild(new Option('All types', ''));
+
+    let listRequest = 0;
     async function loadList() {
+      const mine = ++listRequest; // fast typing: ignore answers that arrive out of order
       const search = $('search').value.trim();
-      const { businesses } = await fetch('/api/crm/businesses?search=' + encodeURIComponent(search)).then((r) => r.json());
-      $('listTitle').textContent = search ? `Search results (${businesses.length})` : `Contacted businesses (${businesses.length})`;
-      $('listEmpty').textContent = search ? 'No business matches.' : 'No messages or notes yet.';
+      const params = new URLSearchParams({ search, type: filterType.value, district: filterDistrict.value, thana: filterThana.value });
+      const { businesses, types } = await fetch('/api/crm/businesses?' + params).then((r) => r.json());
+      if (mine !== listRequest) return;
+      if (filterType.options.length - 1 !== types.length) {
+        const keep = filterType.value;
+        filterType.length = 1;
+        types.forEach((t) => filterType.appendChild(new Option(t, t)));
+        filterType.value = types.includes(keep) ? keep : '';
+      }
+      const filtered = !!(search || filterType.value || filterDistrict.value || filterThana.value);
+      $('listTitle').textContent = filtered ? `Search results (${businesses.length})` : `Contacted businesses (${businesses.length})`;
+      $('listEmpty').textContent = filtered ? 'No business matches.' : 'No messages or notes yet. Search to find a business.';
       $('listEmpty').classList.toggle('hidden', businesses.length > 0);
       const list = $('list');
       list.innerHTML = '';
@@ -156,6 +198,13 @@
       const res = await fetch('/api/crm/businesses/' + selectedId);
       if (!res.ok) { selectedId = null; $('main').classList.remove('viewing'); return; }
       const { business: b, messages, notes, noteKinds } = await res.json();
+      const changed = !current || current.id !== b.id;
+      current = b;
+      if (changed) composeFromTemplate();
+      $('sendWa').disabled = $('sendSms').disabled = !b.active;
+      $('composeHint').textContent = b.active
+        ? 'Saved as a draft; mark it sent below once it really went out.'
+        : 'This business is inactive. Activate it to send messages.';
       $('placeholder').classList.add('hidden');
       $('detail').classList.remove('hidden');
       $('bName').textContent = b.name;
@@ -163,6 +212,7 @@
       $('bAddress').textContent = b.address;
       $('bMeta').textContent = [b.business_type, b.thana, b.district].filter(Boolean).join(' · ');
       $('bMap').href = b.map_url;
+      $('bMap').classList.toggle('hidden', !/^https?:\/\//.test(b.map_url));
       $('bInactive').classList.toggle('hidden', !!b.active);
       const tog = $('bToggle');
       tog.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>';
@@ -192,10 +242,12 @@
         li.appendChild(head);
         li.appendChild(el('p', 'whitespace-pre-wrap text-sm', m.body));
         const actions = el('div', 'mt-2 flex gap-3 text-xs font-medium');
-        actions.appendChild(button(isSent ? 'Mark as draft' : 'Mark as sent',
-          isSent ? 'text-slate-600 hover:underline' : 'text-emerald-700 hover:underline',
-          async () => { await api('PUT', `/api/messages/${m.id}/status`, { status: isSent ? 'draft' : 'sent' }); refresh(); }));
-        actions.appendChild(button('Delete', 'text-red-600 hover:underline', async () => {
+        if (!isSent || isAdmin) {
+          actions.appendChild(button(isSent ? 'Mark as draft' : 'Mark as sent',
+            isSent ? 'text-slate-600 hover:underline' : 'text-emerald-700 hover:underline',
+            async () => { await api('PUT', `/api/messages/${m.id}/status`, { status: isSent ? 'draft' : 'sent' }); refresh(); }));
+        }
+        if (!isSent || isAdmin) actions.appendChild(button('Delete', 'text-red-600 hover:underline', async () => {
           if (!confirm('Delete this message record?')) return;
           await api('DELETE', '/api/messages/' + m.id);
           refresh();
@@ -214,7 +266,7 @@
         head.appendChild(el('span', 'text-slate-500', when(n.created_at) + (n.username ? ' · ' + n.username : '')));
         li.appendChild(head);
         li.appendChild(el('p', 'whitespace-pre-wrap text-sm', n.note));
-        li.appendChild(button('Delete', 'mt-2 text-xs font-medium text-red-600 hover:underline', async () => {
+        if (isAdmin) li.appendChild(button('Delete', 'mt-2 text-xs font-medium text-red-600 hover:underline', async () => {
           if (!confirm('Delete this note?')) return;
           await api('DELETE', '/api/notes/' + n.id);
           refresh();
@@ -222,6 +274,54 @@
         nl.appendChild(li);
       });
     }
+
+    /* ---------- Send message (WhatsApp / SMS) ---------- */
+    const DEFAULT_MESSAGE = 'Hello {name}';
+    let templates = [];
+    let settings = { whatsappMode: 'web', company: '', contact: '' };
+    let current = null; // business shown in the detail pane
+    const tplSelect = $('templateSelect');
+
+    async function loadMessagingConfig() {
+      const [t, st] = await Promise.all([
+        fetch('/api/templates').then((r) => r.json()),
+        fetch('/api/settings').then((r) => r.json()),
+      ]);
+      const keep = tplSelect.value || (t.lastUsedId ? String(t.lastUsedId) : '');
+      templates = t.templates;
+      settings = st;
+      tplSelect.innerHTML = '';
+      tplSelect.appendChild(new Option('No template (write your own)', ''));
+      templates.forEach((x) => tplSelect.appendChild(new Option(x.title, x.id)));
+      tplSelect.value = templates.some((x) => String(x.id) === keep) ? keep : '';
+    }
+
+    // Template text with this business's details filled in; the box stays editable afterwards.
+    function composeFromTemplate() {
+      if (!current) return;
+      const body = templates.find((x) => String(x.id) === tplSelect.value)?.body || DEFAULT_MESSAGE;
+      $('composeText').value = fillTemplate(body, { ...current, company: settings.company, contact: settings.contact });
+    }
+
+    tplSelect.addEventListener('change', () => {
+      composeFromTemplate();
+      api('POST', '/api/templates/last-used', { id: tplSelect.value });
+    });
+
+    function send(channel) {
+      const text = $('composeText').value.trim();
+      if (!current || !text) return;
+      // Save the draft first (keepalive survives the page switching to the app), then open the app straight away
+      // so the browser still treats it as a click and does not block the WhatsApp Web popup.
+      const saved = fetch('/api/messages', {
+        method: 'POST', headers: json, keepalive: true,
+        body: JSON.stringify({ businessId: current.id, channel, body: text }),
+      });
+      launchChannel(channel, current.phone, text, settings.whatsappMode);
+      saved.then(refresh).catch(() => {});
+    }
+    $('sendWa').addEventListener('click', () => send('whatsapp'));
+    $('sendSms').addEventListener('click', () => send('sms'));
 
     const refresh = () => Promise.all([loadDetail(), loadList()]);
 
@@ -236,13 +336,15 @@
 
     $('backBtn').addEventListener('click', () => { $('main').classList.remove('viewing'); window.scrollTo(0, 0); });
     let timer;
-    $('search').addEventListener('input', () => { $('main').classList.remove('viewing'); clearTimeout(timer); timer = setTimeout(loadList, 250); });
+    $('search').addEventListener('input', () => { $('main').classList.remove('viewing'); clearTimeout(timer); timer = setTimeout(loadList, 150); });
+    filterDistrict.addEventListener('change', () => fillThanas(filterThana, filterDistrict.value, 'All thanas'));
+    [filterType, filterDistrict, filterThana].forEach((x) => x.addEventListener('change', () => { $('main').classList.remove('viewing'); loadList(); }));
     // Returning from WhatsApp: pick up newly saved drafts
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); loadMessagingConfig().then(() => { if (!$('composeText').value) composeFromTemplate(); }); } });
 
     if (selectedId) $('main').classList.add('viewing');
     loadList();
-    loadDetail();
+    loadMessagingConfig().then(loadDetail);
   </script>
 </body>
 </html>

@@ -86,7 +86,7 @@
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label for="delay" class="mb-1 block text-sm font-medium">Delay per listing (seconds)</label>
-              <input id="delay" type="number" min="1" step="1" value="6"
+              <input id="delay" type="number" min="20" step="1" value="20"
                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
             </div>
             <div>
@@ -95,7 +95,7 @@
                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
             </div>
           </div>
-          <p class="text-xs text-slate-500">Longer delays lower the chance of Google asking for verification. 5 seconds or more is a safer starting point.</p>
+          <p class="text-xs text-slate-500">Longer delays lower the chance of Google asking for verification and keep the server load low. The minimum <span id="minDelayText">20</span> seconds is set in <a href="/templates.html" class="text-brand-600 hover:underline">settings</a>.</p>
           <div class="flex gap-3">
             <button id="startBtn" class="flex-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50">Start scraping</button>
             <button id="stopBtn" disabled class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Stop</button>
@@ -140,6 +140,7 @@
             class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30">
             <option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All</option>
           </select>
+          <button id="addBtn" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">+ Add business</button>
           <button id="exportBtn" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">Download CSV</button>
         </div>
       </div>
@@ -185,44 +186,65 @@
     </section>
   </main>
 
-  <script src="/thanas.js"></script>
-  <script>
-    const DIVISIONS = {
-      'Barishal': ['Barguna', 'Barishal', 'Bhola', 'Jhalokati', 'Patuakhali', 'Pirojpur'],
-      'Chattogram': ['Bandarban', 'Brahmanbaria', 'Chandpur', 'Chattogram', "Cox's Bazar", 'Cumilla', 'Feni', 'Khagrachhari', 'Lakshmipur', 'Noakhali', 'Rangamati'],
-      'Dhaka': ['Dhaka', 'Faridpur', 'Gazipur', 'Gopalganj', 'Kishoreganj', 'Madaripur', 'Manikganj', 'Munshiganj', 'Narayanganj', 'Narsingdi', 'Rajbari', 'Shariatpur', 'Tangail'],
-      'Khulna': ['Bagerhat', 'Chuadanga', 'Jashore', 'Jhenaidah', 'Khulna', 'Kushtia', 'Magura', 'Meherpur', 'Narail', 'Satkhira'],
-      'Mymensingh': ['Jamalpur', 'Mymensingh', 'Netrokona', 'Sherpur'],
-      'Rajshahi': ['Bogura', 'Chapainawabganj', 'Joypurhat', 'Naogaon', 'Natore', 'Pabna', 'Rajshahi', 'Sirajganj'],
-      'Rangpur': ['Dinajpur', 'Gaibandha', 'Kurigram', 'Lalmonirhat', 'Nilphamari', 'Panchagarh', 'Rangpur', 'Thakurgaon'],
-      'Sylhet': ['Habiganj', 'Moulvibazar', 'Sunamganj', 'Sylhet'],
-    };
+  <dialog id="addDialog" class="w-[calc(100%-1.5rem)] max-w-lg rounded-xl p-0 shadow-xl backdrop:bg-slate-900/50">
+    <form id="addForm" class="max-h-[90vh] space-y-4 overflow-y-auto p-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-semibold">Add business</h2>
+        <button type="button" id="addClose" aria-label="Close" class="rounded-md px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100">&times;</button>
+      </div>
+      <div>
+        <label for="addName" class="mb-1 block text-sm font-medium">Name <span class="text-red-600">*</span></label>
+        <input id="addName" required maxlength="200" autocomplete="off" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+      </div>
+      <div>
+        <label for="addPhone" class="mb-1 block text-sm font-medium">Phone <span class="text-red-600">*</span></label>
+        <input id="addPhone" required type="tel" inputmode="tel" maxlength="40" placeholder="01XXXXXXXXX" autocomplete="off" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+      </div>
+      <div>
+        <label for="addAddress" class="mb-1 block text-sm font-medium">Address</label>
+        <input id="addAddress" maxlength="500" autocomplete="off" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+      </div>
+      <div>
+        <label for="addType" class="mb-1 block text-sm font-medium">Type</label>
+        <input id="addType" list="typeList" maxlength="100" placeholder="e.g. Tiles showroom" autocomplete="off" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+        <datalist id="typeList"></datalist>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label for="addDistrict" class="mb-1 block text-sm font-medium">District</label>
+          <select id="addDistrict" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></select>
+        </div>
+        <div>
+          <label for="addThana" class="mb-1 block text-sm font-medium">Thana</label>
+          <select id="addThana" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"></select>
+        </div>
+      </div>
+      <div>
+        <label for="addMap" class="mb-1 block text-sm font-medium">Map link</label>
+        <input id="addMap" type="url" maxlength="1000" placeholder="https://maps.google.com/..." autocomplete="off" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base sm:text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+      </div>
+      <p id="addError" class="hidden text-sm text-red-600"></p>
+      <div class="flex justify-end gap-3">
+        <button type="button" id="addCancel" class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+        <button id="addSave" class="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50">Save</button>
+      </div>
+    </form>
+  </dialog>
 
+  <script src="/thanas.js"></script>
+  <script src="/shared.js"></script>
+  <script>
     const $ = (id) => document.getElementById(id);
     const districtSel = $('district');
     const filterSel = $('filterDistrict');
 
     // Populate both dropdowns (64 districts, grouped by division)
-    districtSel.innerHTML = '<option value="">Select a district</option>';
-    filterSel.innerHTML = '<option value="">All districts</option>';
-    for (const [division, districts] of Object.entries(DIVISIONS)) {
-      for (const sel of [districtSel, filterSel]) {
-        const group = document.createElement('optgroup');
-        group.label = division + ' Division';
-        districts.forEach((d) => group.appendChild(new Option(d, d)));
-        sel.appendChild(group);
-      }
-    }
+    fillDistricts(districtSel, 'Select a district');
+    fillDistricts(filterSel, 'All districts');
 
     // Thana dropdowns depend on the chosen district
     const thanaSel = $('thana');
     const filterThanaSel = $('filterThana');
-    function fillThanas(sel, district, emptyLabel) {
-      sel.innerHTML = '';
-      sel.appendChild(new Option(emptyLabel, ''));
-      (THANAS[district] || []).forEach((t) => sel.appendChild(new Option(t, t)));
-      sel.disabled = !district;
-    }
     fillThanas(thanaSel, '', 'Select a district first');
     fillThanas(filterThanaSel, '', 'All thanas');
     districtSel.addEventListener('change', () => fillThanas(thanaSel, districtSel.value, 'Whole district'));
@@ -292,8 +314,8 @@
         addLog({ message: 'Enter a business type and choose a district first.', level: 'warn', time: new Date().toLocaleTimeString() });
         return;
       }
-      if (!(body.delay >= 1)) {
-        addLog({ message: 'Delay must be at least 1 second.', level: 'warn', time: new Date().toLocaleTimeString() });
+      if (!(body.delay >= minDelay)) {
+        addLog({ message: `Delay must be at least ${minDelay} seconds.`, level: 'warn', time: new Date().toLocaleTimeString() });
         return;
       }
       const res = await fetch('/api/scrape', {
@@ -305,6 +327,15 @@
         const { error } = await res.json().catch(() => ({}));
         addLog({ message: error || 'Could not start the job.', level: 'error', time: new Date().toLocaleTimeString() });
       }
+    });
+
+    // The minimum delay comes from the settings (admin-editable); the server enforces it too.
+    let minDelay = 20;
+    fetch('/api/settings').then((r) => r.json()).then((st) => {
+      minDelay = st.minDelay;
+      $('delay').min = minDelay;
+      $('minDelayText').textContent = minDelay;
+      if (Number($('delay').value) < minDelay) $('delay').value = minDelay;
     });
 
     $('stopBtn').addEventListener('click', () => fetch('/api/stop', { method: 'POST' }));
@@ -355,19 +386,24 @@
         tel.textContent = r.phone;
         phoneTd.appendChild(tel);
         tr.appendChild(phoneTd);
-        tr.appendChild(cell(r.address, 'min-w-[16rem]', 'm-full text-slate-500'));
-        tr.appendChild(cell(r.business_type, '', 'm-chip'));
-        tr.appendChild(cell(r.district, '', 'm-chip'));
+        tr.appendChild(cell(r.address || '-', 'min-w-[16rem]', r.address ? 'm-full text-slate-500' : 'm-hide'));
+        tr.appendChild(cell(r.business_type || '-', '', r.business_type ? 'm-chip' : 'm-hide'));
+        tr.appendChild(cell(r.district || '-', '', r.district ? 'm-chip' : 'm-hide'));
         tr.appendChild(cell(r.thana || '-', '', r.thana ? 'm-chip' : 'm-hide'));
         const td = document.createElement('td');
         td.className = 'py-2.5 pr-4 align-top m-chip';
-        const a = document.createElement('a');
-        a.href = r.map_url;
-        a.target = '_blank';
-        a.rel = 'noopener';
-        a.textContent = 'Open';
-        a.className = 'text-brand-600 hover:underline';
-        td.appendChild(a);
+        if (/^https?:\/\//.test(r.map_url)) {
+          const a = document.createElement('a');
+          a.href = r.map_url;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = 'Open';
+          a.className = 'text-brand-600 hover:underline';
+          td.appendChild(a);
+        } else {
+          td.textContent = '-';
+          td.classList.add('m-hide');
+        }
         tr.appendChild(td);
         const wa = document.createElement('td');
         wa.className = 'py-2.5 align-top';
@@ -457,19 +493,11 @@
       });
     tplSelect.addEventListener('change', rememberTemplate);
 
-    // Bangladesh numbers -> international digits (01XXXXXXXXX -> 8801XXXXXXXXX)
-    function waNumber(phone) {
-      let d = String(phone).replace(/\D/g, '');
-      if (d.startsWith('00')) d = d.slice(2);
-      if (d.startsWith('0')) d = '880' + d.slice(1);
-      return d;
-    }
-
     // Fills {name}, {phone}, {address}, {business_type}, {district}, {thana}, {map_url} from the row, and {company}, {contact} from settings.
     function buildMessage(r) {
       const tpl = templates.find((x) => String(x.id) === tplSelect.value)?.body || DEFAULT_MESSAGE;
       const data = { ...r, ...mine };
-      return tpl.replace(/\{(\w+)\}/g, (m, k) => (k in data ? data[k] ?? '' : m));
+      return fillTemplate(tpl, data);
     }
 
     // Records the message as a draft; it counts as sent only after it is marked sent on the CRM page.
@@ -485,16 +513,14 @@
       await loadWhatsAppConfig(); // pick up template/setting edits made on the other page
       rememberTemplate();
       await logDraft(r, 'whatsapp');
-      const q = `phone=${waNumber(r.phone)}&text=${encodeURIComponent(buildMessage(r))}`;
-      if (whatsappMode === 'app') window.location.href = 'whatsapp://send?' + q;
-      else window.open('https://web.whatsapp.com/send?' + q, 'whatsapp_web');
+      launchChannel('whatsapp', r.phone, buildMessage(r), whatsappMode);
     }
 
     async function openSms(r) {
       await loadWhatsAppConfig();
       rememberTemplate();
       await logDraft(r, 'sms');
-      window.location.href = `sms:+${waNumber(r.phone)}?body=${encodeURIComponent(buildMessage(r))}`;
+      launchChannel('sms', r.phone, buildMessage(r));
     }
 
     let searchTimer;
@@ -514,6 +540,49 @@
     $('exportBtn').addEventListener('click', () => {
       const params = filterParams();
       window.location.href = '/api/export.csv?' + params;
+    });
+
+    /* ---------- Add business (popup) ---------- */
+    const addDialog = $('addDialog');
+    fillDistricts($('addDistrict'), 'Select a district');
+    fillThanas($('addThana'), '', 'Select a district first');
+    $('addDistrict').addEventListener('change', () => fillThanas($('addThana'), $('addDistrict').value, 'Select a thana'));
+
+    $('addBtn').addEventListener('click', () => {
+      $('addForm').reset();
+      fillThanas($('addThana'), '', 'Select a district first');
+      $('addError').classList.add('hidden');
+      $('typeList').innerHTML = '';
+      [...filterType.options].filter((o) => o.value).forEach((o) => $('typeList').appendChild(new Option(o.value)));
+      addDialog.showModal();
+      $('addName').focus();
+    });
+    ['addClose', 'addCancel'].forEach((id) => $(id).addEventListener('click', () => addDialog.close()));
+
+    $('addForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('addSave').disabled = true;
+      $('addError').classList.add('hidden');
+      try {
+        const res = await fetch('/api/businesses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: $('addName').value, phone: $('addPhone').value, address: $('addAddress').value,
+            business_type: $('addType').value, district: $('addDistrict').value, thana: $('addThana').value, map_url: $('addMap').value,
+          }),
+        });
+        if (!res.ok) {
+          const { error } = await res.json().catch(() => ({}));
+          $('addError').textContent = error || 'Could not save the business.';
+          $('addError').classList.remove('hidden');
+          return;
+        }
+        addDialog.close();
+        reload();
+      } finally {
+        $('addSave').disabled = false;
+      }
     });
 
     // Coming back from WhatsApp/the CRM page: refresh the sent/draft counts.

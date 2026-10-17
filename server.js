@@ -1,10 +1,12 @@
 const express = require('express');
+const os = require('os');
+const crypto = require('crypto');
 const path = require('path');
 const puppeteer = require('puppeteer');
 const {
-  insertBusiness, list, listPage, listBusinessTypes,
-  NOTE_KINDS, getBusiness, setBusinessActive, createMessage, setMessageStatus, deleteMessage, listMessages,
-  createNote, deleteNote, listNotes, listCrmBusinesses,
+  insertBusiness, phoneExists, list, listPage, listBusinessTypes,
+  NOTE_KINDS, getMessage, getBusiness, setBusinessActive, createMessage, setMessageStatus, deleteMessage, listMessages,
+  createNote, deleteNote, listNotes, listCrmBusinesses, iterate,
   listTemplates, createTemplate, updateTemplate, deleteTemplate, getSettings, saveSetting,
 } = require('./database');
 const auth = require('./auth');
@@ -13,6 +15,9 @@ const app = express();
 // On EC2 behind nginx/Caddy set TRUST_PROXY=1 so req.ip and req.secure come from X-Forwarded-* headers.
 if (process.env.TRUST_PROXY) app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
+// Run at a lower CPU priority (Chromium inherits it) so other projects on the server win when the CPU is busy.
+// Override with NICE=0..19 (19 = lowest priority).
+try { os.setPriority(Number(process.env.NICE ?? 15)); } catch (err) { console.warn('Could not set CPU priority:', err.message); }
 const HEADLESS = process.env.HEADFUL ? false : true; // run `HEADFUL=1 npm start` to watch the browser
 
 app.use(express.json());
@@ -226,10 +231,19 @@ async function runScrape({ businessType, district, thana, delay, maxResults }) {
     log(`Starting: "${businessType}" in ${thana ? thana + ', ' : ''}${district} | delay ${delay}s | max ${maxResults} listings`);
     browser = await puppeteer.launch({
       headless: HEADLESS,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=en-US'],
+      args: [
+        '--no-sandbox', '--disable-setuid-sandbox', '--lang=en-US',
+        // Cut Chromium's CPU/RAM use: no GPU, no extensions, no background work, small /dev/shm friendly
+        '--disable-gpu', '--disable-dev-shm-usage', '--disable-extensions', '--mute-audio',
+        '--disable-background-networking', 
+        '--disable-sync', '--disable-default-apps', '--no-first-run', '--disable-features=Translate,MediaRouter',
+      ],
     });
     const page = await browser.newPage();
     await page.setViewport({ width: 1366, height: 900 });
+    // Map tiles, photos, fonts and media are the heaviest part of a Maps page and we only read text.
+    await page.setRequestInterception(true);
+    page.on('request', (r) => (['image', 'media', 'font'].includes(r.resourceType()) ? r.abort() : r.continue()));
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
 
     const query = `${businessType} in ${thana ? thana + ', ' : ''}${district}, Bangladesh`;
@@ -325,7 +339,8 @@ app.post('/api/scrape', (req, res) => {
   const businessType = String(req.body.businessType || '').trim();
   const district = String(req.body.district || '').trim();
   const thana = String(req.body.thana || '').trim();
-  const delay = Math.max(1, Number(req.body.delay) || 6); // seconds, enforced minimum of 1
+  const minDelay = getMinDelay();
+  const delay = Math.max(minDelay, Number(req.body.delay) || minDelay); // seconds, never below the configured minimum
   const maxResults = Math.min(200, Math.max(1, parseInt(req.body.maxResults, 10) || 20));
 
   if (!businessType || !district) {
@@ -335,6 +350,33 @@ app.post('/api/scrape', (req, res) => {
   res.json({ ok: true });
   runScrape({ businessType, district, thana, delay, maxResults });
 });
+
+// Manually added business. Only name and phone are required; map_url is UNIQUE so a blank one gets a "manual:" placeholder.
+app.post('/api/businesses', handle((req, res) => {
+  const text = (v, max) => cleanText(v).slice(0, max);
+  const name = text(req.body.name, 200);
+  const phone = text(req.body.phone, 40);
+  const district = text(req.body.district, 60);
+  const thana = text(req.body.thana, 80);
+  let mapUrl = String(req.body.map_url || '').trim().slice(0, 1000);
+  if (!name) throw Object.assign(new Error('Name is required.'), { status: 400 });
+  if (!isValidPhone(phone)) throw Object.assign(new Error('Enter a valid phone number (8-15 digits).'), { status: 400 });
+  if (mapUrl && !/^https?:\/\//i.test(mapUrl)) throw Object.assign(new Error('Map link must start with http:// or https://'), { status: 400 });
+  if (mapUrl) mapUrl = normalizeMapUrl(mapUrl);
+  const record = {
+    business_type: text(req.body.business_type, 100),
+    district,
+    thana,
+    name,
+    phone,
+    address: text(req.body.address, 500),
+    map_url: mapUrl || `manual:${crypto.randomUUID()}`,
+  };
+  if (phoneExists(phone) || !insertBusiness(record)) {
+    throw Object.assign(new Error('A business with this phone number or map link already exists.'), { status: 409 });
+  }
+  res.json({ ok: true });
+}));
 
 app.post('/api/stop', (req, res) => {
   if (state.running) {
@@ -368,6 +410,15 @@ app.get('/api/businesses', (req, res) => {
 
 /* ---------- Message templates (WhatsApp + SMS) + settings ---------- */
 const WHATSAPP_MODES = ['app', 'web'];
+
+// Smallest allowed delay between two Maps listings; an admin can change it in the settings (default 20s).
+const DEFAULT_MIN_DELAY = 20;
+const MIN_DELAY_RANGE = [10, 600]; // allowed values for the setting itself, in seconds
+const inDelayRange = (n) => n >= MIN_DELAY_RANGE[0] && n <= MIN_DELAY_RANGE[1];
+const getMinDelay = () => {
+  const n = Math.floor(Number(getSettings().minDelay));
+  return inDelayRange(n) ? n : DEFAULT_MIN_DELAY;
+};
 
 function readTemplate(req) {
   const title = String(req.body.title || '').trim().slice(0, 100);
@@ -410,13 +461,20 @@ app.get('/api/settings', (req, res) => {
   const s = getSettings();
   res.json({
     whatsappMode: WHATSAPP_MODES.includes(s.whatsappMode) ? s.whatsappMode : 'web',
+    minDelay: getMinDelay(),
     contact: s.contact || '', // your phone/link, available in templates as {contact}
     company: s.company || '', // your company name, available in templates as {company}
   });
 });
 
 app.put('/api/settings', (req, res) => {
-  const { whatsappMode, contact, company } = req.body;
+  const { whatsappMode, contact, company, minDelay } = req.body;
+  if (minDelay !== undefined) {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Only an admin can change the minimum delay.' });
+    const n = Math.floor(Number(minDelay));
+    if (!inDelayRange(n)) return res.status(400).json({ error: `Minimum delay must be between ${MIN_DELAY_RANGE[0]} and ${MIN_DELAY_RANGE[1]} seconds.` });
+    saveSetting('minDelay', String(n));
+  }
   if (whatsappMode !== undefined) {
     if (!WHATSAPP_MODES.includes(whatsappMode)) return res.status(400).json({ error: 'Invalid WhatsApp mode.' });
     saveSetting('whatsappMode', whatsappMode);
@@ -427,6 +485,9 @@ app.put('/api/settings', (req, res) => {
 });
 
 /* ---------- CRM: message log + contact notes ---------- */
+const requireAdminRole = (req) => {
+  if (req.user.role !== 'admin') throw Object.assign(new Error('Only an admin can do this.'), { status: 403 });
+};
 const notFound = () => Object.assign(new Error('Not found.'), { status: 404 });
 
 // Called when WhatsApp/SMS is opened: the message is stored as a draft until someone marks it sent.
@@ -441,7 +502,11 @@ app.post('/api/messages', handle((req, res) => {
 app.put('/api/messages/:id/status', handle((req, res) => {
   const status = String(req.body.status || '');
   if (!['draft', 'sent'].includes(status)) throw Object.assign(new Error('Invalid status.'), { status: 400 });
-  if (!setMessageStatus(Number(req.params.id), status)) throw notFound();
+  const msg = getMessage(Number(req.params.id));
+  if (!msg) throw notFound();
+  // A sent message is part of the record: only an admin may take it back to draft.
+  if (msg.status === 'sent' && status === 'draft') requireAdminRole(req);
+  setMessageStatus(msg.id, status);
   res.json({ ok: true });
 }));
 
@@ -451,13 +516,17 @@ app.put('/api/businesses/:id/active', handle((req, res) => {
   res.json({ ok: true });
 }));
 
-app.delete('/api/messages/:id', (req, res) => {
+// Drafts can be deleted by anyone; sent messages and notes only by an admin.
+app.delete('/api/messages/:id', handle((req, res) => {
+  const msg = getMessage(Number(req.params.id));
+  if (msg?.status === 'sent') requireAdminRole(req);
   deleteMessage(Number(req.params.id));
   res.json({ ok: true });
-});
+}));
 
 app.get('/api/crm/businesses', (req, res) => {
-  res.json({ businesses: listCrmBusinesses(String(req.query.search || '').trim()) });
+  const f = filtersFrom(req.query);
+  res.json({ businesses: listCrmBusinesses({ ...f, search: f.search.trim() }), types: listBusinessTypes() });
 });
 
 app.get('/api/crm/businesses/:id', handle((req, res) => {
@@ -475,25 +544,40 @@ app.post('/api/crm/businesses/:id/notes', handle((req, res) => {
   res.json({ ok: true, id: createNote(business.id, kind, note, req.user.id) });
 }));
 
-app.delete('/api/notes/:id', (req, res) => {
+app.delete('/api/notes/:id', auth.requireAdmin, (req, res) => {
   deleteNote(Number(req.params.id));
   res.json({ ok: true });
 });
 
-app.get('/api/export.csv', (req, res) => {
-  const rows = list(filtersFrom(req.query));
+app.get('/api/export.csv', async (req, res) => {
   const columns = ['id', 'business_type', 'district', 'thana', 'name', 'phone', 'address', 'map_url', 'created_at'];
   const esc = (v) => {
     const s = String(v ?? '');
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const csv = [columns.join(','), ...rows.map((r) => columns.map((c) => esc(r[c])).join(','))].join('\r\n');
-
   res.set({
     'Content-Type': 'text/csv; charset=utf-8',
     'Content-Disposition': `attachment; filename="businesses_${new Date().toISOString().slice(0, 10)}.csv"`,
   });
-  res.send('\uFEFF' + csv); // BOM so Excel shows Bengali text correctly
+  // Streamed in chunks so a very large export never sits in memory all at once
+  let chunk = '\uFEFF' + columns.join(',') + '\r\n'; // BOM so Excel shows Bengali text correctly
+  let aborted = false;
+  req.on('close', () => { aborted = true; });
+  try {
+    for (const r of iterate(filtersFrom(req.query))) {
+      if (aborted) return;
+      if (String(r.map_url).startsWith('manual:')) r.map_url = ''; // placeholder for businesses added without a map link
+      chunk += columns.map((c) => esc(r[c])).join(',') + '\r\n';
+      if (chunk.length > 64 * 1024) {
+        if (!res.write(chunk)) await new Promise((resolve) => res.once('drain', resolve));
+        chunk = '';
+      }
+    }
+    res.end(chunk);
+  } catch (err) {
+    console.error(err);
+    res.destroy(err);
+  }
 });
 
 app.listen(PORT, process.env.HOST || '0.0.0.0', () => console.log(`Dashboard running at http://localhost:${PORT}`));

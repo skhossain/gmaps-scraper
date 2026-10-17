@@ -67,6 +67,18 @@
       </div>
     </section>
 
+    <section id="scraperSettings" class="hidden rounded-xl border border-slate-200 bg-white p-5">
+      <h2 class="mb-3 text-base font-semibold">Scraper settings <span class="text-xs font-normal text-slate-500">(admin)</span></h2>
+      <label for="minDelay" class="mb-1 block text-sm font-medium">Minimum delay per listing (seconds, 10-600)</label>
+      <div class="flex flex-wrap items-center gap-3">
+        <input id="minDelay" type="number" min="10" max="600" step="1" value="20"
+          class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30" />
+        <button id="minDelayBtn" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">Save</button>
+        <span id="minDelaySaved" class="text-sm"></span>
+      </div>
+      <p class="mt-2 text-xs text-slate-500">Nobody can start a search with a shorter delay than this. A longer delay means less server CPU and fewer Google verification pages.</p>
+    </section>
+
     <div class="grid gap-6 lg:grid-cols-5">
       <!-- Editor -->
       <section class="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-5">
@@ -238,9 +250,20 @@
       flash($('contactSaved'), res.ok ? 'Saved' : 'Could not save.', res.ok ? 'text-emerald-600' : 'text-red-600');
     });
 
+    $('minDelayBtn').addEventListener('click', async () => {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minDelay: Number($('minDelay').value) }),
+      });
+      flash($('minDelaySaved'), res.ok ? 'Saved' : (await res.json().catch(() => ({}))).error || 'Could not save.', res.ok ? 'text-emerald-600' : 'text-red-600');
+    });
+    fetch('/api/me').then((r) => r.json()).then((me) => $('scraperSettings').classList.toggle('hidden', me.role !== 'admin'));
+
     let mine = { company: '', contact: '' };
     fetch('/api/settings').then((r) => r.json()).then((s) => {
       $('mode').value = s.whatsappMode;
+      $('minDelay').value = s.minDelay;
       $('contact').value = s.contact;
       $('company').value = s.company;
       mine = { company: s.company, contact: s.contact };
