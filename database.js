@@ -30,6 +30,10 @@ if (!db.prepare('PRAGMA table_info(businesses)').all().some((c) => c.name === 't
 if (!db.prepare('PRAGMA table_info(businesses)').all().some((c) => c.name === 'active')) {
   db.exec('ALTER TABLE businesses ADD COLUMN active INTEGER NOT NULL DEFAULT 1');
 }
+// no_whatsapp = 1 when someone found out this number has no WhatsApp account
+if (!db.prepare('PRAGMA table_info(businesses)').all().some((c) => c.name === 'no_whatsapp')) {
+  db.exec('ALTER TABLE businesses ADD COLUMN no_whatsapp INTEGER NOT NULL DEFAULT 0');
+}
 db.exec('CREATE INDEX IF NOT EXISTS idx_businesses_district_thana ON businesses(district, thana)');
 
 /* ---------- Indexes for large datasets (hundreds of thousands of rows) ---------- */
@@ -175,10 +179,12 @@ const stmtNotes = lazy(`
 `);
 
 const stmtBusinessActive = db.prepare('UPDATE businesses SET active = ? WHERE id = ?');
+const stmtBusinessNoWa = db.prepare('UPDATE businesses SET no_whatsapp = ? WHERE id = ?');
 const stmtMessageById = db.prepare('SELECT * FROM messages WHERE id = ?');
 const getMessage = (id) => stmtMessageById.get(id);
 const getBusiness = (id) => stmtBusiness.get(id);
 const setBusinessActive = (id, active) => stmtBusinessActive.run(active ? 1 : 0, id).changes > 0;
+const setBusinessNoWhatsapp = (id, noWa) => stmtBusinessNoWa.run(noWa ? 1 : 0, id).changes > 0;
 const createMessage = (businessId, channel, body, userId) => stmtMessageInsert.run(businessId, channel, body, userId).lastInsertRowid;
 const setMessageStatus = (id, status) => stmtMessageStatus.run(status, status, id).changes > 0;
 const deleteMessage = (id) => stmtMessageDelete.run(id).changes > 0;
@@ -295,11 +301,13 @@ function insertBusiness(record) {
   }
 }
 
-function buildWhere({ search = '', district = '', thana = '', type = '', status = 'active' } = {}) {
+function buildWhere({ search = '', district = '', thana = '', type = '', status = 'active', wa = '' } = {}) {
   const where = [];
   const params = {};
   if (status === 'active') where.push('active = 1');
   else if (status === 'inactive') where.push('active = 0');
+  if (wa === 'no') where.push('no_whatsapp = 1');
+  else if (wa === 'yes') where.push('no_whatsapp = 0');
   if (search) {
     where.push(searchClause(search, params));
   }
@@ -344,7 +352,7 @@ const listBusinessTypes = () => stmtTypes.all().map((r) => r.business_type);
 
 module.exports = {
   db, insertBusiness, isDuplicate, phoneExists, list, iterate, listPage, listBusinessTypes,
-  NOTE_KINDS, getMessage, getBusiness, setBusinessActive, createMessage, setMessageStatus, deleteMessage, listMessages,
+  NOTE_KINDS, getMessage, getBusiness, setBusinessActive, setBusinessNoWhatsapp, createMessage, setMessageStatus, deleteMessage, listMessages,
   createNote, deleteNote, listNotes, listCrmBusinesses,
   listTemplates, createTemplate, updateTemplate, deleteTemplate, getSettings, saveSetting,
 };

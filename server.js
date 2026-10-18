@@ -5,7 +5,7 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const {
   insertBusiness, phoneExists, list, listPage, listBusinessTypes,
-  NOTE_KINDS, getMessage, getBusiness, setBusinessActive, createMessage, setMessageStatus, deleteMessage, listMessages,
+  NOTE_KINDS, getMessage, getBusiness, setBusinessActive, setBusinessNoWhatsapp, createMessage, setMessageStatus, deleteMessage, listMessages,
   createNote, deleteNote, listNotes, listCrmBusinesses, iterate,
   listTemplates, createTemplate, updateTemplate, deleteTemplate, getSettings, saveSetting,
 } = require('./database');
@@ -78,6 +78,8 @@ const state = {
   running: false,
   stopRequested: false,
   progress: { current: 0, total: 0, saved: 0, skipped: 0, duplicates: 0 },
+  queue: [],        // jobs waiting to run: { district, thana }
+  currentJob: null, // job being scraped now, plus its position: { district, thana, index, count }
 };
 
 const send = (res, payload) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -92,6 +94,8 @@ function log(message, level = 'info') {
 }
 const pushProgress = () => broadcast({ type: 'progress', ...state.progress });
 const pushStatus = () => broadcast({ type: 'status', running: state.running });
+const queueInfo = () => ({ type: 'queue', current: state.currentJob, waiting: state.queue.map(({ district, thana }) => ({ district, thana })) });
+const pushQueue = () => broadcast(queueInfo());
 
 app.get('/api/events', (req, res) => {
   res.set({
@@ -103,6 +107,7 @@ app.get('/api/events', (req, res) => {
   logBuffer.forEach((e) => send(res, e));
   send(res, { type: 'status', running: state.running });
   send(res, { type: 'progress', ...state.progress });
+  send(res, queueInfo());
   clients.add(res);
   const ping = setInterval(() => res.write(': ping\n\n'), 25000);
   req.on('close', () => {
@@ -219,11 +224,9 @@ async function extractDetails(page) {
   });
 }
 
+// Scrapes one district/thana. Called by runQueue, which owns state.running.
 async function runScrape({ businessType, district, thana, delay, maxResults }) {
-  state.running = true;
-  state.stopRequested = false;
   state.progress = { current: 0, total: 0, saved: 0, skipped: 0, duplicates: 0 };
-  pushStatus();
   pushProgress();
 
   let browser;
@@ -323,11 +326,33 @@ async function runScrape({ businessType, district, thana, delay, maxResults }) {
     log(`Scraper failed: ${err.message}`, 'error');
   } finally {
     if (browser) await browser.close().catch(() => {});
-    state.running = false;
-    state.stopRequested = false;
-    pushStatus();
     broadcast({ type: 'saved' });
   }
+}
+
+// Runs the queued jobs one after another (one browser at a time). Stop clears what is still waiting.
+async function runQueue(common) {
+  state.running = true;
+  state.stopRequested = false;
+  pushStatus();
+  const count = state.queue.length;
+  let index = 0;
+  while (state.queue.length && !state.stopRequested) {
+    const job = state.queue.shift();
+    index++;
+    state.currentJob = { district: job.district, thana: job.thana, index, count };
+    pushQueue();
+    if (count > 1) log(`--- Queue ${index}/${count}: ${job.thana ? job.thana + ', ' : ''}${job.district} ---`);
+    await runScrape({ ...common, ...job });
+  }
+  if (state.queue.length) log(`Queue stopped. ${state.queue.length} remaining job(s) were cancelled.`, 'warn');
+  state.queue = [];
+  state.currentJob = null;
+  state.running = false;
+  state.stopRequested = false;
+  pushQueue();
+  pushStatus();
+  if (count > 1) log(`Queue finished (${index}/${count} jobs run).`, 'success');
 }
 
 /* ------------------------------------------------------------------ */
@@ -337,18 +362,31 @@ app.post('/api/scrape', (req, res) => {
   if (state.running) return res.status(409).json({ error: 'A scraping job is already running.' });
 
   const businessType = String(req.body.businessType || '').trim();
-  const district = String(req.body.district || '').trim();
-  const thana = String(req.body.thana || '').trim();
   const minDelay = getMinDelay();
   const delay = Math.max(minDelay, Number(req.body.delay) || minDelay); // seconds, never below the configured minimum
   const maxResults = Math.min(200, Math.max(1, parseInt(req.body.maxResults, 10) || 20));
 
-  if (!businessType || !district) {
-    return res.status(400).json({ error: 'Business type and district are required.' });
+  // `jobs` is a list of { district, thana } (thana may be empty = whole district); one queue entry each.
+  // The old single district/thana body is still accepted.
+  const raw = Array.isArray(req.body.jobs) ? req.body.jobs : [{ district: req.body.district, thana: req.body.thana }];
+  const seen = new Set();
+  const jobs = [];
+  for (const j of raw) {
+    const district = String(j?.district || '').trim();
+    const thana = String(j?.thana || '').trim();
+    if (!district || seen.has(`${district}|${thana}`)) continue;
+    seen.add(`${district}|${thana}`);
+    jobs.push({ district, thana });
   }
 
-  res.json({ ok: true });
-  runScrape({ businessType, district, thana, delay, maxResults });
+  if (!businessType || !jobs.length) {
+    return res.status(400).json({ error: 'Business type and at least one district are required.' });
+  }
+  if (jobs.length > 500) return res.status(400).json({ error: 'Too many locations selected (max 500).' });
+
+  state.queue = jobs;
+  res.json({ ok: true, queued: jobs.length });
+  runQueue({ businessType, delay, maxResults });
 });
 
 // Manually added business. Only name and phone are required; map_url is UNIQUE so a blank one gets a "manual:" placeholder.
@@ -381,7 +419,7 @@ app.post('/api/businesses', handle((req, res) => {
 app.post('/api/stop', (req, res) => {
   if (state.running) {
     state.stopRequested = true;
-    log('Stop requested. Finishing the current listing...', 'warn');
+    log('Stop requested. Finishing the current listing and cancelling the rest of the queue...', 'warn');
   }
   res.json({ ok: true });
 });
@@ -393,6 +431,7 @@ const filtersFrom = (q) => ({
   thana: String(q.thana || ''),
   type: String(q.type || ''),
   status: ['active', 'inactive', 'all'].includes(q.status) ? q.status : 'active',
+  wa: ['yes', 'no'].includes(q.wa) ? q.wa : '',
 });
 
 app.get('/api/businesses', (req, res) => {
@@ -516,6 +555,12 @@ app.put('/api/businesses/:id/active', handle((req, res) => {
   res.json({ ok: true });
 }));
 
+// Marks that this phone number has no WhatsApp account (or clears the mark).
+app.put('/api/businesses/:id/no-whatsapp', handle((req, res) => {
+  if (!setBusinessNoWhatsapp(Number(req.params.id), !!req.body.noWhatsapp)) throw notFound();
+  res.json({ ok: true });
+}));
+
 // Drafts can be deleted by anyone; sent messages and notes only by an admin.
 app.delete('/api/messages/:id', handle((req, res) => {
   const msg = getMessage(Number(req.params.id));
@@ -550,7 +595,7 @@ app.delete('/api/notes/:id', auth.requireAdmin, (req, res) => {
 });
 
 app.get('/api/export.csv', async (req, res) => {
-  const columns = ['id', 'business_type', 'district', 'thana', 'name', 'phone', 'address', 'map_url', 'created_at'];
+  const columns = ['id', 'business_type', 'district', 'thana', 'name', 'phone', 'address', 'map_url', 'created_at', 'no_whatsapp'];
   const esc = (v) => {
     const s = String(v ?? '');
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

@@ -61,6 +61,8 @@
             <p id="bPhone" class="mt-1 text-sm font-medium"></p>
             <p id="bAddress" class="mt-1 text-sm text-slate-500"></p>
             <p id="bMeta" class="mt-1 text-xs text-slate-400"></p>
+            <p id="bNoWa" class="mt-2 hidden text-sm font-semibold text-red-700">No WhatsApp on this number</p>
+            <button id="bNoWaToggle" type="button" class="mt-2 mr-3 rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"></button>
             <p id="bInactive" class="mt-2 hidden text-sm font-semibold text-amber-700">Inactive</p>
             <button id="bToggle" type="button" class="mt-2 mr-3 inline-flex rounded-md p-1.5 hover:bg-slate-100"></button>
             <a id="bMap" target="_blank" rel="noopener" class="mt-2 inline-block text-sm text-brand-600 hover:underline">Open in Maps</a>
@@ -172,7 +174,7 @@
         const li = el('li');
         const btn = el('button', 'block w-full px-2 py-3 text-left hover:bg-slate-50 ' + (b.id === selectedId ? 'bg-brand-50' : ''));
         btn.type = 'button';
-        btn.appendChild(el('div', 'text-sm font-medium' + (b.active ? '' : ' text-slate-400'), b.name + (b.active ? '' : ' (inactive)')));
+        btn.appendChild(el('div', 'text-sm font-medium' + (b.active ? '' : ' text-slate-400'), b.name + (b.active ? '' : ' (inactive)') + (b.no_whatsapp ? ' · no WA' : '')));
         btn.appendChild(el('div', 'text-xs text-slate-500', b.phone));
         const stats = [`${b.sent_count} sent`];
         if (b.draft_count) stats.push(`${b.draft_count} draft`);
@@ -201,10 +203,19 @@
       const changed = !current || current.id !== b.id;
       current = b;
       if (changed) composeFromTemplate();
-      $('sendWa').disabled = $('sendSms').disabled = !b.active;
-      $('composeHint').textContent = b.active
-        ? 'Saved as a draft; mark it sent below once it really went out.'
-        : 'This business is inactive. Activate it to send messages.';
+      $('sendWa').disabled = !b.active || !!b.no_whatsapp;
+      $('sendSms').disabled = !b.active;
+      $('composeHint').textContent = !b.active
+        ? 'This business is inactive. Activate it to send messages.'
+        : b.no_whatsapp
+          ? 'This number is marked as having no WhatsApp. Use SMS.'
+          : 'Saved as a draft; mark it sent below once it really went out.';
+      $('bNoWa').classList.toggle('hidden', !b.no_whatsapp);
+      $('bNoWaToggle').textContent = b.no_whatsapp ? 'Undo "no WhatsApp"' : 'Mark: no WhatsApp';
+      $('bNoWaToggle').onclick = async () => {
+        await api('PUT', `/api/businesses/${b.id}/no-whatsapp`, { noWhatsapp: !b.no_whatsapp });
+        refresh();
+      };
       $('placeholder').classList.add('hidden');
       $('detail').classList.remove('hidden');
       $('bName').textContent = b.name;
